@@ -42,6 +42,41 @@ pub const DATA_MAX_SIZE: usize = 1024;
 const DATA_LEN_SIZE: usize = 4;
 const TOTAL_FRAME_SIZE: usize = DATA_MAX_SIZE + DATA_LEN_SIZE;
 
+struct Start;
+struct AwaitingEphemeralKey;
+struct AwaitingAuthSignature;
+
+struct SecretConnectionBuilder<S: State> {
+    extra: S,
+}
+
+impl<IoHandler: Read + Write + Send + Sync> SecretConnectionBuilder<Start, IoHandler> {
+    fn new(
+        mut io_handler: IoHandler,
+        local_privkey: &ed25519::Keypair,
+        protocol_version: Version,
+    ) -> SecretConnectionBuilder<AwaitingEphemeralKey> {
+        let local_pubkey = PublicKey::from(local_privkey);
+
+        // Generate ephemeral keys for perfect forward secrecy.
+        let (local_eph_pubkey, local_eph_privkey) = gen_eph_keys();
+
+        // Write local ephemeral pubkey and receive one too.
+        let remote_eph_pubkey =
+            share_eph_pubkey(&mut io_handler, &local_eph_pubkey, protocol_version)?;
+
+        SecretConnectionBuilder {
+            extra: AwaitingEphemeralKey,
+        }
+    }
+}
+
+impl SecretConnectionBuilder<AwaitingEphemeralKey> {
+    fn recv_key(mut self, k: EphemeralPublic) -> SecretConnectionBuilder<AwaitingAuthSignature> {
+
+    }
+}
+
 /// Encrypted connection between peers in a Tendermint network
 pub struct SecretConnection<IoHandler: Read + Write + Send + Sync> {
     io_handler: IoHandler,
